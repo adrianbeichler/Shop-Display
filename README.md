@@ -85,3 +85,7 @@ Dort kannst du:
 - Nicht benötigte Dateien löschen
 - Die Wiedergabeliste (`media.txt`) speichern
 ```
+
+## ⚛️ Electron App
+You can use and start this with Electron
+You need to execute the main.js for that with Electron
