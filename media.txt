@@ -1,0 +1,6 @@
+**In Klammern wird die Anzeigezeit geschrieben (für Bilder) Videos brauchen keine Anzeigezeit
+**Medien mit Dateinname hier hinzufügen und entsprechend der Reihnfolge mit Absätzen anordnen
+** Kommentare sind auch möglich. Die Datei wird auch von /upload.html verwaltet
+Beispiel.png (6)
+TestBild.gif (10)
+Der neue AStA Info-Monitor.mp4

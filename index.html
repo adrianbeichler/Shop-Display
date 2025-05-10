@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medien Anzeige Monitor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden; /* Kein Scrollen erlaubt */
+            position: relative; /* Für das Positionieren des Ladebalkens */
+        }
+        video {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; /* Seitenverhältnis beibehalten */
+            background-color: black; /* Schwarzer Hintergrund für leere Bereiche */
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; /* Seitenverhältnis beibehalten */
+            background-color: black; /* Schwarzer Hintergrund für leere Bereiche */
+            opacity: 0; /* Anfangs ausgeblendet */
+            transition: opacity 1s ease-in-out; /* Sanfter Übergang für Ein- und Ausblenden */
+            display: none; /* Bilder werden zunächst nicht angezeigt */
+        }
+
+        #progressBarContainer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%; /* Breite des Bildschirms */
+            height: 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+			border-radius: 8px;
+        }
+
+        #progressBar {
+            height: 100%;
+            width: 0;
+			border-radius: 8px;
+            background-color: rgba(0, 255, 0, 0.8);
+        }
+
+        /* Styling für die Seitenanzahl */
+        #pageCounter {
+            position: absolute;
+            bottom: 30px; /* Abstand vom unteren Rand */
+            right: 30px;  /* Abstand vom rechten Rand */
+            font-size: 40px; /* Etwas größere Schrift */
+            color: white; /* Schriftfarbe */
+            background-color: rgba(0, 0, 0, 0.5); /* Halbtransparenter Hintergrund */
+            padding: 5px 10px; /* Innenabstände für etwas Raum */
+            border-radius: 8px; /* Abgerundete Ecken */
+            font-family: "Courier New", Courier, monospace; /* Standard-Schriftart */
+            text-shadow: 2px 2px 5px black; /* Schwarzer Textschatten für bessere Sichtbarkeit */
+        }
+    </style>
+</head>
+<body>
+
+<video id="videoPlayer" autoplay muted></video>
+<img id="imageDisplay" alt="Bildanzeige" />
+<div id="progressBarContainer">
+    <div id="progressBar"></div>
+</div>
+
+<!-- Seitenzähler hinzugefügt -->
+<div id="pageCounter">1/1</div>
+
+<script>
+    let mediaFiles = []; // Liste der Mediendateien (Bilder und Videos)
+    let mediaIndex = 0;
+    const videoPlayer = document.getElementById('videoPlayer');
+    const imageDisplay = document.getElementById('imageDisplay');
+    const progressBar = document.getElementById('progressBar');
+    const pageCounter = document.getElementById('pageCounter'); // Referenz zum Seitenzähler
+    const defaultImageDuration = 10000; // Standardanzeigezeit für Bilder (10 Sekunden)
+    let currentDisplayTime = 0; // Zeit, die das aktuelle Medium angezeigt wird
+    let progressInterval; // Variable, um das Intervall zu speichern
+    let lastReloadCheck = ''; // Speichert den letzten Status der reload.txt
+
+    // Funktion, um die TXT-Datei zu laden und die Mediendateien in ein Array zu füllen
+    async function loadMedia() {
+        try {
+            const response = await fetch('media.txt');
+            const text = await response.text();
+            mediaFiles = text.split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('**')) // Entfernt leere Zeilen und Kommentare
+                .map(parseMediaLine); // Konvertiert die Zeilen in Objekte
+            if (mediaFiles.length > 0) {
+                updatePageCounter(); // Aktualisiere den Seitenzähler
+                playNextMedia(); // Startet mit der Wiedergabe
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Medienliste:', error);
+        }
+    }
+
+    // Funktion, um eine Zeile aus der Datei zu verarbeiten (Name und Dauer)
+    function parseMediaLine(line) {
+        const match = line.match(/^(.+?)\s*(\((\d+)\))?$/); // Matcht den Dateinamen und die optionale Dauer in Klammern
+        const filename = match[1].trim();
+        const duration = match[3] ? parseInt(match[3], 10) * 1000 : null; // Wenn eine Dauer angegeben ist, in ms umwandeln
+        return { filename, duration };
+    }
+
+    // Funktion, um das nächste Medium (Bild oder Video) abzuspielen
+    function playNextMedia() {
+        clearInterval(progressInterval); // Vorheriges Intervall stoppen
+
+        // Zuerst das aktuelle Bild ausblenden (nur für Bilder)
+        imageDisplay.style.opacity = 0;
+
+        // Nach einem kurzen Timeout (für das Ausblenden), wechseln wir zum nächsten Medium
+        setTimeout(() => {
+            if (mediaFiles.length > 0) {
+                const currentFile = mediaFiles[mediaIndex];
+                const { filename, duration } = currentFile;
+
+                // Unterscheide zwischen Bild und Video
+                if (/\.(mp4|webm|ogg)$/i.test(filename)) {
+                    // Es ist ein Video
+                    videoPlayer.src = 'media/' + filename;
+                    videoPlayer.style.display = 'block'; // Video anzeigen
+                    imageDisplay.style.display = 'none'; // Bild verstecken
+                    videoPlayer.load();
+                    videoPlayer.play();
+
+                    // Wenn das Video bereit ist, holen wir die tatsächliche Videodauer
+                    videoPlayer.onloadedmetadata = () => {
+                        const videoDuration = videoPlayer.duration * 1000; // Videodauer in ms
+                        resetProgressBar(videoDuration); // Ladebalken für die Videodauer
+                    };
+
+                    // Nach dem Ende des Videos wechsle zum nächsten Medium
+                    videoPlayer.onended = () => {
+                        mediaIndex = (mediaIndex + 1) % mediaFiles.length; // Index des nächsten Mediums berechnen
+                        updatePageCounter(); // Seitenzähler aktualisieren
+                        playNextMedia(); // Wechsle zum nächsten Medium
+                    };
+
+                } else if (/\.(jpg|jpeg|png|gif)$/i.test(filename)) {
+                    // Es ist ein Bild
+                    videoPlayer.style.display = 'none'; // Video verstecken
+                    imageDisplay.style.display = 'block'; // Bild anzeigen
+                    imageDisplay.src = 'media/' + filename;
+
+                    // Bild für die angegebene Dauer oder die Standarddauer anzeigen
+                    const imageDisplayTime = duration || defaultImageDuration;
+                    resetProgressBar(imageDisplayTime); // Ladebalken für die Dauer des Bildes
+
+                    // Bilder ein- und ausblenden (Opacity Transition nur für Bilder)
+                    setTimeout(() => {
+                        imageDisplay.style.opacity = 1;
+                    }, 100); // Nach kurzer Verzögerung einblenden
+
+                    setTimeout(() => {
+                        imageDisplay.style.opacity = 0; // Ausblenden nach Ablauf der Anzeigedauer
+                    }, imageDisplayTime - 1000); // Ausblenden eine Sekunde vor Ablauf der Dauer
+
+                    setTimeout(() => {
+                        mediaIndex = (mediaIndex + 1) % mediaFiles.length; // Index des nächsten Mediums berechnen
+                        updatePageCounter(); // Seitenzähler aktualisieren
+                        playNextMedia(); // Wechsle zum nächsten Medium
+                    }, imageDisplayTime); // Zeit in ms
+                }
+            }
+        }, 100); // Kurze Verzögerung für das Ausblenden
+    }
+
+    // Funktion zum Zurücksetzen und Starten des Ladebalkens
+    function resetProgressBar(displayTime) {
+        clearInterval(progressInterval); // Eventuell laufendes Intervall stoppen
+        progressBar.style.width = '0'; // Setze die Breite auf 0
+        currentDisplayTime = displayTime; // Setze die aktuelle Anzeigezeit
+
+        // Ladebalken animieren
+        progressInterval = setInterval(() => {
+            currentDisplayTime -= 50; // Verringere die Zeit um 50 ms
+            progressBar.style.width = ((displayTime - currentDisplayTime) / displayTime) * 100 + '%'; // Berechne den neuen Fortschritt
+            if (currentDisplayTime <= 0) {
+                clearInterval(progressInterval); // Stoppe die Animation, wenn die Zeit abgelaufen ist
+            }
+        }, 50); // Aktualisiere den Ladebalken alle 50 ms
+    }
+
+    // Funktion zum Aktualisieren des Seitenzählers
+    function updatePageCounter() {
+        pageCounter.textContent = `${mediaIndex + 1}/${mediaFiles.length}`;
+    }
+
+    // Funktion zum Überwachen der reload.txt Datei
+async function checkForReload() {
+    try {
+        const response = await fetch('reload.txt', { cache: "no-store" });
+        const text = await response.text();
+        if (lastReloadCheck && text.trim() !== lastReloadCheck) {
+            // NEU: Seiten-Reload, sobald reload.txt sich ändert (nicht nur loadMedia())
+            window.location.reload(); // Komplettes Neuladen der Anzeige!
+        }
+        lastReloadCheck = text.trim();
+    } catch (error) {
+        console.error('Fehler beim Überwachen der reload.txt:', error);
+    }
+}
+
+// Überwache die reload.txt Datei alle 5 Sekunden
+setInterval(checkForReload, 5000);
+
+// Beim Laden der Seite initial erstmal die reload.txt merken und Medien laden
+window.onload = async function() {
+    try {
+        const resp = await fetch('reload.txt', { cache: "no-store" });
+        lastReloadCheck = (await resp.text()).trim();
+    } catch (e) {
+        lastReloadCheck = null;
+    }
+    loadMedia();
+};
+
+    // Beim Laden der Seite die Mediendateien aus der TXT-Datei laden
+    window.onload = loadMedia;
+</script>
+
+</body>
+</html>
